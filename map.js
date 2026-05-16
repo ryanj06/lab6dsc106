@@ -1,8 +1,8 @@
 import mapboxgl from 'https://cdn.jsdelivr.net/npm/mapbox-gl@2.15.0/+esm';
 import * as d3 from 'https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm';
-
+ 
 mapboxgl.accessToken = 'pk.eyJ1IjoicnlhbmowNiIsImEiOiJjbXA3bGs3NncwNGJtMnVxMWdoNXZubzZiIn0.Xj4L1wunBxK5g_FRuxzTow';
-
+ 
 const map = new mapboxgl.Map({
   container: 'map',
   style: 'mapbox://styles/mapbox/streets-v12',
@@ -11,27 +11,29 @@ const map = new mapboxgl.Map({
   minZoom: 5,
   maxZoom: 18,
 });
-
+ 
 const svg = d3.select('#map').select('svg');
-
+ 
 function getCoords(station) {
-  const point = new mapboxgl.LngLat(+station.Long, +station.Lat);
+  const lon = +station.Long || +station.lon || +station.longitude || +station.lng;
+  const lat = +station.Lat || +station.lat || +station.latitude;
+  const point = new mapboxgl.LngLat(lon, lat);
   const { x, y } = map.project(point);
   return { cx: x, cy: y };
 }
-
+ 
 function formatTime(minutes) {
   const date = new Date(0, 0, 0, 0, minutes);
   return date.toLocaleString('en-US', { timeStyle: 'short' });
 }
-
+ 
 function minutesSinceMidnight(date) {
   return date.getHours() * 60 + date.getMinutes();
 }
-
+ 
 let departuresByMinute = Array.from({ length: 1440 }, () => []);
 let arrivalsByMinute = Array.from({ length: 1440 }, () => []);
-
+ 
 function filterByMinute(tripsByMinute, minute) {
   if (minute === -1) return tripsByMinute.flat();
   let minMinute = (minute - 60 + 1440) % 1440;
@@ -41,7 +43,7 @@ function filterByMinute(tripsByMinute, minute) {
   }
   return tripsByMinute.slice(minMinute, maxMinute).flat();
 }
-
+ 
 function computeStationTraffic(stations, timeFilter = -1) {
   const departures = d3.rollup(
     filterByMinute(departuresByMinute, timeFilter),
@@ -61,9 +63,9 @@ function computeStationTraffic(stations, timeFilter = -1) {
     return station;
   });
 }
-
+ 
 const stationFlow = d3.scaleQuantize().domain([0, 1]).range([0, 0.5, 1]);
-
+ 
 map.on('load', async () => {
   // Boston bike lanes
   map.addSource('boston_route', {
@@ -76,7 +78,7 @@ map.on('load', async () => {
     source: 'boston_route',
     paint: { 'line-color': '#32D400', 'line-width': 3, 'line-opacity': 0.5 },
   });
-
+ 
   // Cambridge bike lanes
   map.addSource('cambridge_route', {
     type: 'geojson',
@@ -88,7 +90,7 @@ map.on('load', async () => {
     source: 'cambridge_route',
     paint: { 'line-color': '#32D400', 'line-width': 3, 'line-opacity': 0.5 },
   });
-
+ 
   // Load stations
   let jsonData;
   try {
@@ -98,7 +100,7 @@ map.on('load', async () => {
     console.error('Error loading JSON:', error);
     return;
   }
-
+ 
   // Load trips
   let trips = await d3.csv(
     'https://dsc106.com/labs/lab07/data/bluebikes-traffic-2024-03.csv',
@@ -112,14 +114,14 @@ map.on('load', async () => {
       return trip;
     }
   );
-
+ 
   let stations = computeStationTraffic(jsonData.data.stations);
   console.log('Stations:', stations);
-
+ 
   const radiusScale = d3.scaleSqrt()
     .domain([0, d3.max(stations, d => d.totalTraffic)])
     .range([0, 25]);
-
+ 
   const circles = svg
     .selectAll('circle')
     .data(stations, d => d.short_name)
@@ -134,24 +136,24 @@ map.on('load', async () => {
       d3.select(this).append('title')
         .text(`${d.totalTraffic} trips (${d.departures} departures, ${d.arrivals} arrivals)`);
     });
-
+ 
   function updatePositions() {
     circles
       .attr('cx', d => getCoords(d).cx)
       .attr('cy', d => getCoords(d).cy);
   }
-
+ 
   updatePositions();
   map.on('move', updatePositions);
   map.on('zoom', updatePositions);
   map.on('resize', updatePositions);
   map.on('moveend', updatePositions);
-
+ 
   // Slider
   const timeSlider = document.getElementById('time-slider');
   const selectedTime = document.getElementById('selected-time');
   const anyTimeLabel = document.getElementById('any-time');
-
+ 
   function updateScatterPlot(timeFilter) {
     const filteredStations = computeStationTraffic(stations, timeFilter);
     timeFilter === -1 ? radiusScale.range([0, 25]) : radiusScale.range([3, 50]);
@@ -161,7 +163,7 @@ map.on('load', async () => {
       .attr('r', d => radiusScale(d.totalTraffic))
       .style('--departure-ratio', d => stationFlow(d.departures / d.totalTraffic));
   }
-
+ 
   function updateTimeDisplay() {
     let timeFilter = Number(timeSlider.value);
     if (timeFilter === -1) {
@@ -173,7 +175,7 @@ map.on('load', async () => {
     }
     updateScatterPlot(timeFilter);
   }
-
+ 
   timeSlider.addEventListener('input', updateTimeDisplay);
   updateTimeDisplay();
 });
